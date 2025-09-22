@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Steam License Cleanup
 // @namespace    https://github.com/PatrickJnr/Steam-License-Cleanup/
-// @version      1.5
-// @description  Scans all license pages and allows interactive review before removing licenses based on keywords. Features exclusion list, pagination handling, progress bar, rate-limit handling, persistent settings, summary modal with export, and cancellation.
+// @version      1.6
+// @description  Scans all license pages and allows interactive review before removing licenses based on keywords or date ranges. Features exclusion list, pagination handling, progress bar with detailed feedback, rate-limit handling, persistent settings, summary modal with export, and cancellation.
 // @author       PatrickJnr (Enhanced by Gemini)
 // @match        https://store.steampowered.com/account/licenses*
 // @grant        none
@@ -10,18 +10,20 @@
 // @downloadURL  https://github.com/PatrickJnr/Steam-License-Cleanup/raw/main/Steam-License-Cleanup.user.js
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // --- CONFIGURATION & STATE ---
     const DEFAULTS = {
         keywords: ["trailer", "teaser", "demo", "cinematic", "pegi", "esrb", "soundtrack", "playtest", "beta", "alpha"],
-        exclusions: ["(Soundtrack)", "Game Developer"] // Example: protect items with these words
+        exclusions: ["(Soundtrack)", "Game Developer"], // Example: protect items with these words
+        removalDelay: 600000 // Default 10 minute (600,000 ms) delay between removals
     };
     let state = {
         settings: {
             keywords: [],
-            exclusions: []
+            exclusions: [],
+            removalDelay: 600000
         },
         isCleaning: false,
         removedDetails: [],
@@ -42,9 +44,30 @@
                 --steam-error: #ff3300;
                 --steam-warning: #ffcc00;
             }
-            .cleanup-button-container {
+            .cleanup-controls-container {
                 text-align: center;
                 margin-bottom: 20px;
+                padding: 10px;
+                background-color: rgba(0,0,0,0.2);
+                border-radius: 5px;
+            }
+            .date-range-container {
+                margin-bottom: 15px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 15px;
+            }
+            .date-range-container label {
+                color: var(--steam-light-text);
+                font-size: 14px;
+            }
+            .date-range-container input[type="date"] {
+                background-color: #2a3f5a;
+                border: 1px solid var(--steam-blue);
+                color: var(--steam-light-text);
+                padding: 5px;
+                border-radius: 3px;
             }
             .steam-cleanup-button {
                 background: var(--steam-dark-gradient);
@@ -54,7 +77,7 @@
                 font-size: 14px;
                 padding: 10px 20px;
                 cursor: pointer;
-                margin: 10px;
+                margin: 5px;
                 display: inline-block;
                 box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
                 transition: all 0.2s;
@@ -136,6 +159,14 @@
                 border: 1px solid var(--steam-blue);
                 padding: 10px;
             }
+             .modal-input {
+                width: 100px;
+                margin-bottom: 15px;
+                background: #2a3f5a;
+                color: var(--steam-light-text);
+                border: 1px solid var(--steam-blue);
+                padding: 5px;
+            }
             #review-list {
                 list-style: none;
                 padding: 0;
@@ -166,11 +197,24 @@
         document.head.appendChild(style);
     };
 
+    // --- HELPERS ---
+    const parseSteamDate = (dateString) => {
+        if (!dateString) return null;
+        // Steam format is "25 Jan, 2023". The comma is optional for JS Date parsing.
+        try {
+            return new Date(dateString.replace(',', ''));
+        } catch (e) {
+            return null;
+        }
+    };
+
     // --- LOCALSTORAGE & SETTINGS ---
     const loadSettings = () => {
         try {
             const saved = localStorage.getItem('steamLicenseCleanupSettings');
-            state.settings = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULTS));
+            const parsed = saved ? JSON.parse(saved) : {};
+            // Merge saved settings with defaults to ensure new settings are applied
+            state.settings = { ...JSON.parse(JSON.stringify(DEFAULTS)), ...parsed };
         } catch (e) {
             console.error("Failed to load settings:", e);
             state.settings = JSON.parse(JSON.stringify(DEFAULTS));
@@ -191,29 +235,55 @@
         if (!tableElement) return foundLicenses;
 
         const { keywords, exclusions } = state.settings;
-        if (keywords.length === 0) return []; // Don't match anything if keywords are empty
+        const useKeywordlessMode = keywords.length === 0 && exclusions.length === 0;
 
-        const keywordRegex = new RegExp(`\\b(?:${keywords.join("|")})\\b`, "i");
+        const keywordRegex = keywords.length > 0 ? new RegExp(`\\b(?:${keywords.join("|")})\\b`, "i") : null;
         const exclusionRegex = exclusions.length > 0 ? new RegExp(`\\b(?:${exclusions.join("|")})\\b`, "i") : null;
 
+        const startDateInput = document.getElementById('start-date-input').valueAsDate;
+        const endDateInput = document.getElementById('end-date-input').valueAsDate;
+
         for (const row of tableElement.rows) {
+            // Date check
+            const dateText = row.cells[0]?.textContent?.trim();
+            const licenseDate = parseSteamDate(dateText);
+            if (!licenseDate) continue; // Skip rows we can't parse a date from
+
+            if (startDateInput && licenseDate < startDateInput) continue;
+            if (endDateInput) {
+                const endOfDay = new Date(endDateInput);
+                endOfDay.setHours(23, 59, 59, 999); // Ensure end date is inclusive
+                if (licenseDate > endOfDay) continue;
+            }
+
+            // Keyword check
             const cell = row.cells[1];
             const cellText = cell?.textContent;
-            if (!cellText || !keywordRegex.test(cellText) || (exclusionRegex && exclusionRegex.test(cellText))) {
-                continue;
+            if (!cellText) continue;
+
+            let isMatch = false;
+            if (useKeywordlessMode) {
+                isMatch = true; // Match everything if keywords are empty
+            } else if (keywordRegex && keywordRegex.test(cellText)) {
+                if (!exclusionRegex || !exclusionRegex.test(cellText)) {
+                    isMatch = true; // Match if inclusion is found and exclusion is not
+                }
             }
+
+            if (!isMatch) continue;
 
             const link = cell.querySelector('a[href*="RemoveFreeLicense"]');
             const packageIdMatch = link ? /RemoveFreeLicense\s*\(\s*(\d+)/.exec(link.href) : null;
             if (packageIdMatch) {
                 const packageId = packageIdMatch[1];
                 const cleanText = cellText.trim().replace(/[\r\n\t]+/g, " ");
-                const details = `${cleanText} (Package ID: ${packageId})`;
+                const details = `${cleanText} (Acquired: ${dateText}, Package ID: ${packageId})`;
                 foundLicenses.push({ packageId, details });
             }
         }
         return foundLicenses;
     };
+
 
     const scanAllPages = async () => {
         const { modal, statusElement } = showWorkingModal(
@@ -241,10 +311,10 @@
                 const licensesOnPage = parseTableForDetails(table);
 
                 // Stop if we find an empty table or a page without a "next" button
-                if (!table || !doc.querySelector('.pagebtn.next')) {
+                if (!table || licensesOnPage.length === 0 || !doc.querySelector('.pagebtn.next')) {
                     hasMorePages = false;
                 }
-                
+
                 licensesOnPage.forEach(license => {
                     if (!existingIds.has(license.packageId)) {
                         allLicenses.push(license);
@@ -293,6 +363,15 @@
                 removeNextPackage(licensesToRemove, i, progressBar, statusText); // Retry same package
             } else if (data.success) { // Success
                 state.removedDetails.push(license.details);
+                // Wait for the configured delay before proceeding
+                if (i + 1 < licensesToRemove.length) {
+                    const totalCount = licensesToRemove.length;
+                    const removedCount = state.removedDetails.length; // This will be i + 1
+                    const delayInSeconds = state.settings.removalDelay / 1000;
+                    const statusMessage = `Removed ${removedCount} of ${totalCount}. Waiting ${delayInSeconds}s for next removal...`;
+                    updateProgressBar(progressBar, statusText, progress, statusMessage);
+                    await new Promise(resolve => setTimeout(resolve, state.settings.removalDelay));
+                }
                 removeNextPackage(licensesToRemove, i + 1, progressBar, statusText); // Next package
             } else { // Fail
                 throw new Error(data.error || 'Unknown response from Steam API.');
@@ -310,13 +389,13 @@
             showInfoModal("Error: Not Logged In", "Could not find a valid Steam session ID. Please make sure you are fully logged into store.steampowered.com and refresh the page.");
             return;
         }
-        const scanButton = document.getElementById("scan-button");
-        scanButton.disabled = true;
+        const mainContainer = document.getElementById("cleanup-controls");
+        document.getElementById("scan-button").disabled = true;
 
         const { progressBarContainer, progressBar, statusText } = createProgressBar();
-        scanButton.parentElement.appendChild(progressBarContainer);
+        mainContainer.appendChild(progressBarContainer);
         const cancelButton = createCancelButton();
-        scanButton.parentElement.appendChild(cancelButton);
+        mainContainer.appendChild(cancelButton);
 
         state.isCleaning = true;
         state.removedDetails = []; // Reset for this run
@@ -392,6 +471,8 @@
         showModal(title, `<p>${message}</p>`, []);
     };
 
+
+
     const showWorkingModal = (title, initialMessage) => {
         const content = `<p>${initialMessage}</p><p id="working-status" style="font-weight: bold; text-align: center; margin-top: 15px;"></p>`;
         const modal = showModal(title, content, [], false);
@@ -420,6 +501,10 @@
             <textarea id="keywords-textarea" class="modal-textarea">${state.settings.keywords.join(", ")}</textarea>
             <p><strong>Exclusion Keywords (one per line or comma-separated):</strong><br>Licenses containing these words will be protected, even if they match inclusion keywords.</p>
             <textarea id="exclusions-textarea" class="modal-textarea">${state.settings.exclusions.join(", ")}</textarea>
+            <p style="color: var(--steam-warning);"><strong>Warning:</strong> If both keyword fields above are empty, the script will select ALL removable licenses within the chosen date range for review.</p>
+            <hr style="border-color: #3a4b5e; margin: 20px 0;">
+            <p><strong>Delay Between Removals (milliseconds):</strong><br>A delay after each removal to prevent API errors. 1000ms = 1 second. Default is 600000 (10 minutes).</p>
+            <input type="number" id="delay-input" class="modal-input" value="${state.settings.removalDelay}">
         `;
         const parseInput = (text) => text.split(/[,\n]/).map(k => k.trim()).filter(Boolean);
         const buttons = [{
@@ -428,6 +513,7 @@
             onClick: () => {
                 state.settings.keywords = parseInput(document.getElementById("keywords-textarea").value);
                 state.settings.exclusions = parseInput(document.getElementById("exclusions-textarea").value);
+                state.settings.removalDelay = parseInt(document.getElementById("delay-input").value, 10) || DEFAULTS.removalDelay;
                 saveSettings();
             }
         }, {
@@ -437,6 +523,7 @@
                 state.settings = JSON.parse(JSON.stringify(DEFAULTS));
                 document.getElementById("keywords-textarea").value = state.settings.keywords.join(", ");
                 document.getElementById("exclusions-textarea").value = state.settings.exclusions.join(", ");
+                document.getElementById("delay-input").value = state.settings.removalDelay;
             }
         }];
         showModal("Cleanup Settings", content, buttons);
@@ -444,7 +531,7 @@
 
     const showReviewModal = () => {
         if (state.scannedLicenses.length === 0) {
-            showInfoModal("Scan Complete", "No licenses matching your keywords were found on any pages.");
+            showInfoModal("Scan Complete", "No removable licenses matching your criteria were found.");
             return;
         }
         const listItems = state.scannedLicenses.map((lic, index) =>
@@ -531,13 +618,26 @@
             return;
         }
 
-        const buttonContainer = document.createElement("div");
-        buttonContainer.className = "cleanup-button-container";
-        const scanButton = createButton("scan-button", "Scan for Removable Licenses", "Scans all pages for licenses matching your keywords", scanAllPages);
-        const settingsButton = createButton("settings-button", "Settings", "Customize keywords and exclusions", showSettingsModal);
+        const controlsContainer = document.createElement("div");
+        controlsContainer.className = "cleanup-controls-container";
+        controlsContainer.id = "cleanup-controls";
 
-        buttonContainer.append(scanButton, settingsButton);
-        pageContent.parentNode.insertBefore(buttonContainer, pageContent);
+        // Date Range UI
+        const dateRangeContainer = document.createElement("div");
+        dateRangeContainer.className = "date-range-container";
+        dateRangeContainer.innerHTML = `
+            <label for="start-date-input">Start Date:</label>
+            <input type="date" id="start-date-input">
+            <label for="end-date-input">End Date:</label>
+            <input type="date" id="end-date-input">
+        `;
+        controlsContainer.appendChild(dateRangeContainer);
+
+        const scanButton = createButton("scan-button", "Scan for Removable Licenses", "Scans all pages for licenses matching your criteria", scanAllPages);
+        const settingsButton = createButton("settings-button", "Settings", "Customize keywords, exclusions, and delay", showSettingsModal);
+
+        controlsContainer.append(scanButton, settingsButton);
+        pageContent.parentNode.insertBefore(controlsContainer, pageContent);
     };
 
     if (document.readyState === 'loading') {

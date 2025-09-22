@@ -2,13 +2,13 @@
 
 # 🔰 Steam License Cleanup 🔰
 
-![Version](https://img.shields.io/badge/version-1.5-blue?style=for-the-badge)![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)![Compatible](https://img.shields.io/badge/Tampermonkey-Compatible-brightgreen?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.6-blue?style=for-the-badge)![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)![Compatible](https://img.shields.io/badge/Tampermonkey-Compatible-brightgreen?style=for-the-badge)
 
 </div>
 
 > The ultimate tool for managing your Steam account licenses. This script transforms the default licenses page into a powerful management utility, allowing you to safely clean up unwanted items like demos, betas, and old trailers.
 
-It provides a safe, interactive workflow: it scans your entire library, presents a list of matches to review, and **cannot remove paid games or DLC**. Your purchases are always safe.
+It provides a safe, interactive workflow: it scans your entire library based on your criteria, presents a list of matches to review, and **cannot remove paid games or DLC**. Your purchases are always safe.
 
 ---
 
@@ -20,7 +20,7 @@ It provides a safe, interactive workflow: it scans your entire library, presents
 
 **1. Main Controls & Settings**
 <br>
-*The script adds clean, intuitive buttons to your licenses page. The settings modal allows for powerful filtering with inclusion and exclusion keywords.*
+*The script adds clean, intuitive controls to your licenses page, including new date filters. The settings modal allows for powerful filtering with keywords and a configurable removal delay.*
 
 <img width="372" alt="New buttons on the license page" src="https://github.com/user-attachments/assets/5a917edc-2543-4d42-9eb8-e3e4276646f5" />
 <img width="862" alt="Settings modal with keywords and exclusions" src="https://github.com/user-attachments/assets/66c70741-7d19-46ac-a909-78df316bc86b" />
@@ -42,10 +42,12 @@ It provides a safe, interactive workflow: it scans your entire library, presents
 | Feature                          | Description                                                                                                                                              |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔒 **Safe By Design**              | **Cannot remove paid games or DLC.** The script can only interact with Steam's function for removing *free* licenses, so your purchased library is always safe. |
-| 🔎 **Comprehensive Scanning**      | Automatically scans **all pages** of your licenses, finding every match without manual effort.                                                         |
+| 📅 **Date Range Filtering**        | Target licenses acquired within a specific timeframe. Perfect for cleaning up items from a specific year or event.                                       |
+| 🔎 **Comprehensive Scanning**      | Automatically scans **all pages** of your licenses, finding every match based on your keywords and selected date range.                                  |
 | ✅ **Interactive Review**     | After scanning, you are presented with a detailed list of matches. **Nothing is removed without your final approval.**                      |
 | 🛡️ **Exclusion Filtering**       | Protect specific licenses using an **exclusion list**. An item will be ignored even if it matches your main keywords (e.g., keep a specific "beta"). |
-| 💾 **Persistent Settings**         | Configure your keywords once. The script saves your preferences locally in your browser so they are ready for your next session.                     |
+| ⏱️ **Configurable Delay**         | Set a custom delay between each removal (e.g., 10 minutes) to proactively avoid Steam's API rate limits, ensuring a smooth cleanup.                     |
+| 💾 **Persistent Settings**         | Configure your keywords and delay once. The script saves your preferences locally in your browser so they are ready for your next session.                     |
 | 📊 **Progress and Control**      | A dynamic progress bar shows the status of removals, and a **Cancel** button lets you safely abort the process at any time.                            |
 | ⚙️ **Smart Rate-Limit Handling** | Automatically detects when Steam's API limit is hit, pauses the process, and resumes when it's safe to continue.                                          |
 | 📄 **Summary & Export**            | After cleaning, view a detailed summary of removed licenses. You can **export this list to a `.txt` file** for your personal records.                         |
@@ -64,13 +66,14 @@ It provides a safe, interactive workflow: it scans your entire library, presents
 ## 📖 How to Use: The Safe Workflow
 
 1.  Navigate to your [**Steam Account Licenses Page**](https://store.steampowered.com/account/licenses/).
-2.  **(Optional)** Click `⚙️ Settings` to customize your **Inclusion** (e.g., `demo, beta`) and **Exclusion** keywords.
-3.  Click the `🔎 Scan for Removable Licenses` button to begin.
-4.  Once the scan is complete, the **Interactive Review** modal will appear.
-5.  **Review the list carefully.** Uncheck any licenses you want to keep.
-6.  Click the `Remove Selected (...)` button, and approve the final confirmation prompt.
-7.  The cleanup will begin. You can click `Cancel` at any point to stop the process.
-8.  When finished, a summary modal will detail all removed licenses. From here, you can `Export` the list or `Refresh` the page.
+2.  **(Optional)** Select a **Start Date** and/or **End Date** to limit the scan to a specific period.
+3.  **(Optional)** Click `⚙️ Settings` to customize your **Inclusion** keywords (e.g., `demo, beta`), **Exclusion** keywords, and the new **Removal Delay**.
+4.  Click the `🔎 Scan for Removable Licenses` button to begin.
+5.  Once the scan is complete, the **Interactive Review** modal will appear.
+6.  **Review the list carefully.** Uncheck any licenses you want to keep.
+7.  Click the `Remove Selected (...)` button, and approve the final confirmation prompt.
+8.  The cleanup will begin. You can click `Cancel` at any point to stop the process.
+9.  When finished, a summary modal will detail all removed licenses. From here, you can `Export` the list or `Refresh` the page.
 
 ---
 
@@ -89,15 +92,27 @@ Yes. This script uses Steam's own license removal function. Once a free license 
 </details>
 
 <details>
+<summary><strong>Can I remove all license within a date range?</strong></summary>
+<br>
+Yes. If you remove all of the inclusion and exclusion keywords from the list, it will assume you want to remove all licenses that are capable of doing so. If a date range is selected, it will only remove all licenses within that date range.
+</details>
+
+<details>
 <summary><strong>How does the script identify licenses to remove?</strong></summary>
 <br>
-The script scans license names for your <strong>inclusion keywords</strong> (e.g., "demo", "beta"). However, if a name also contains one of your <strong>exclusion keywords</strong>, it will be ignored, giving you fine-grained control.
+The script scans license names for your <strong>inclusion keywords</strong> (e.g., "demo", "beta") that were acquired within the optional <strong>date range</strong> you've set. If a name also contains one of your <strong>exclusion keywords</strong>, it will be ignored, giving you fine-grained control. If you leave all keyword fields empty, it will select *all* removable licenses within the date range.
+</details>
+
+<details>
+<summary><strong>What is the delay between removals for?</strong></summary>
+<br>
+To prevent your account from being temporarily locked out of making changes, the script includes a configurable delay (defaulting to 10 minutes) between each removal. This is a crucial safety feature to avoid Steam's API rate limits, especially when removing many items. You can adjust this value in the <strong>Settings</strong> modal if you wish.
 </details>
 
 <details>
 <summary><strong>What happens if I encounter a rate limit?</strong></summary>
 <br>
-If you are removing a large number of licenses, Steam's server may temporarily block further requests. The script will detect this, display a "Rate limited" status, wait for 30 seconds, and then automatically continue where it left off.
+Even with the configurable delay, if you are removing a large number of licenses, Steam's server may temporarily block further requests. The script will detect this, display a "Rate limited" status, wait for 30 seconds, and then automatically continue where it left off.
 </details>
 
 <details>
@@ -116,3 +131,4 @@ Yes. The script is open-source and runs entirely within your browser. It does no
 ### ❤️ Credits
 -   @retvil
 -   @TCNOco
+-   @RavenStryker
