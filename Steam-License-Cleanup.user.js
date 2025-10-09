@@ -235,7 +235,6 @@
         if (!tableElement) return foundLicenses;
 
         const { keywords, exclusions } = state.settings;
-        const useKeywordlessMode = keywords.length === 0 && exclusions.length === 0;
 
         const keywordRegex = keywords.length > 0 ? new RegExp(`\\b(?:${keywords.join("|")})\\b`, "i") : null;
         const exclusionRegex = exclusions.length > 0 ? new RegExp(`\\b(?:${exclusions.join("|")})\\b`, "i") : null;
@@ -260,18 +259,25 @@
             const cell = row.cells[1];
             const cellText = cell?.textContent;
             if (!cellText) continue;
-
-            let isMatch = false;
-            if (useKeywordlessMode) {
-                isMatch = true; // Match everything if keywords are empty
-            } else if (keywordRegex && keywordRegex.test(cellText)) {
-                if (!exclusionRegex || !exclusionRegex.test(cellText)) {
-                    isMatch = true; // Match if inclusion is found and exclusion is not
-                }
+            
+            // 1. First, check for exclusions. If it's excluded, we skip it immediately.
+            if (exclusionRegex && exclusionRegex.test(cellText)) {
+                continue;
             }
 
-            if (!isMatch) continue;
+            // 2. Next, determine if it meets the inclusion criteria.
+            let isMatch = false;
+            if (keywords.length === 0) {
+                // If the inclusion list is empty, everything that wasn't excluded is a match.
+                isMatch = true;
+            } else if (keywordRegex && keywordRegex.test(cellText)) {
+                // Otherwise, if the inclusion list is not empty, the item must match it.
+                isMatch = true;
+            }
 
+            // 3. If it's not a match, skip to the next license.
+            if (!isMatch) continue;
+            // Add the license to the list
             const link = cell.querySelector('a[href*="RemoveFreeLicense"]');
             const packageIdMatch = link ? /RemoveFreeLicense\s*\(\s*(\d+)/.exec(link.href) : null;
             if (packageIdMatch) {
