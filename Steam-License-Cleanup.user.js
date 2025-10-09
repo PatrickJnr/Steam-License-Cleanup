@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam License Cleanup
 // @namespace    https://github.com/PatrickJnr/Steam-License-Cleanup/
-// @version      1.6
+// @version      1.7
 // @description  Scans all license pages and allows interactive review before removing licenses based on keywords or date ranges. Features exclusion list, pagination handling, progress bar with detailed feedback, rate-limit handling, persistent settings, summary modal with export, and cancellation.
 // @author       PatrickJnr (Enhanced by Gemini)
 // @match        https://store.steampowered.com/account/licenses*
